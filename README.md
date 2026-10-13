@@ -12,7 +12,7 @@ A small userscript that makes browsing [Yupoo](https://yupoo.com) galleries less
 ### As a userscript (recommended)
 
 1. Install a userscript manager, e.g. [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
-2. Open the raw script file: [`yupoo-gallery-plus.user.js`](./yupoo-gallery-plus.user.js)
+2. Open the raw script file: [`yupoo-gallery-plus.user.js`](https://raw.githubusercontent.com/mjazlowiecki/yupoo-gallery-plus/main/yupoo-gallery-plus.user.js)
    (the manager should offer to install it), or create a new script and paste the file contents.
 3. Open any Yupoo gallery page and refresh.
 
