@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Yupoo Gallery+",
+  "version": "0.1.1",
+  "description": "Larger album tiles and a hover preview for Yupoo galleries.",
+  "content_scripts": [
+    {
+      "matches": ["https://*.yupoo.com/*"],
+      "js": ["yupoo-gallery-plus.user.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
