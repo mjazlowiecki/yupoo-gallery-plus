@@ -1,25 +1,27 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.1.0
-// @description  Jest larger album tiles and a hover preview for Yupoo galleries.
+// @version      0.1.1
+// @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        none
 // @run-at       document-idle
 // @license      MIT
 // ==/UserScript==
- 
+
 /**
  * Yupoo Gallery+
  *
  * Two features:
  *   1. Re-lays out the album grid with larger tiles (CSS Grid).
- *   2. TODO: Shows a floating, full-size preview of the album cover on hover.
+ *   2. Shows a floating, full-size preview of the album cover on hover.
  *
  * The script does not depend on Yupoo's CSS class names. It locates the grid
  * by looking for links to /albums/ and walking up the DOM, so small markup
  * changes on the site should not break it.
  */
+(() => {
+  'use strict';
 
   // ---------------------------------------------------------------------------
   // Configuration
@@ -38,8 +40,7 @@
   // ---------------------------------------------------------------------------
   // Styles
   // ---------------------------------------------------------------------------
-  // !important is needed because the yupoo's own stylesheet sets fixed tile sizes.
-
+  // !important is needed because the Yupoo's own stylesheet sets fixed tile sizes.
   const style = document.createElement('style');
   style.textContent = `
     .yg-grid {
@@ -85,7 +86,7 @@
   // Helpers
   // ---------------------------------------------------------------------------
 
-   /**
+  /**
    * Yupoo serves the same image in several sizes under one path:
    * square / small / medium / big. Swap the size suffix in a photo URL.
    *
@@ -95,8 +96,8 @@
    */
   const withSize = (url, size) =>
     url.replace(/\/(square|small|medium|big)\.(jpe?g|png|webp)/i, `/${size}.$2`);
- 
-   /**
+
+  /**
    * Get the best available source URL of a (possibly lazy-loaded) <img>.
    * Yupoo keeps the real URL in `data-origin-src` until the image is loaded.
    *
@@ -111,18 +112,18 @@
   /**
    * Find the element that contains all album tiles.
    *
-   * how?: collect every album link that has an image, then climb from the
+   * Strategy: collect every album link that has an image, then climb from the
    * first one until the parent contains (almost) all of them. That parent is
    * the grid container.
    *
    * @returns {{grid: HTMLElement, links: HTMLAnchorElement[]} | null}
    *          null when the page has no album grid (fewer than 4 albums).
    */
-   function findGrid() {
+  function findGrid() {
     const withImg = (a) => a.querySelector('img');
     const links = [...document.querySelectorAll(ALBUM_LINK)].filter(withImg);
     if (links.length < 4) return null;
- 
+
     let el = links[0];
     while (
       el.parentElement &&
@@ -133,28 +134,27 @@
     return { grid: el.parentElement, links };
   }
 
-  
   // ---------------------------------------------------------------------------
   // Feature 1: larger tiles
   // ---------------------------------------------------------------------------
- 
-   /**
+
+  /**
    * Apply the grid layout and upgrade thumbnails to a higher resolution.
    * Safe to call repeatedly: already-upgraded images are skipped.
    */
-   function enlarge() {
+  function enlarge() {
     const found = findGrid();
     if (!found) return;
- 
+
     const { grid } = found;
     grid.classList.add('yg-grid');
     [...grid.children].forEach((child) => child.classList.add('yg-tile'));
- 
+
     grid.querySelectorAll('img').forEach((img) => {
       if (img.dataset.ygUp) return; // already processed
       const url = imgUrl(img);
       if (!/photo\.yupoo\.com/.test(url)) return; // only touch Yupoo photos
- 
+
       img.dataset.ygUp = '1';
       const bigger = withSize(url, 'medium');
       if (bigger !== url) {
@@ -164,3 +164,107 @@
       }
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Feature 2: hover preview
+  // ---------------------------------------------------------------------------
+  const preview = document.createElement('div');
+  preview.id = 'yg-preview';
+  const previewImg = document.createElement('img');
+  preview.appendChild(previewImg);
+  document.body.appendChild(preview);
+
+  /** @type {number | null} Pending "show preview" timeout. */
+  let timer = null;
+  /** @type {HTMLAnchorElement | null} Tile the pointer is currently over. */
+  let currentTile = null;
+
+  /**
+   * Place the preview next to the cursor, keeping it inside the viewport.
+   * Defaults to the right of the cursor; flips to the left near the right edge.
+   *
+   * @param {{clientX: number, clientY: number}} e  Pointer position.
+   */
+  function position(e) {
+    const offset = 20;
+    const margin = 8;
+    const w = preview.offsetWidth;
+    const h = preview.offsetHeight;
+
+    let x = e.clientX + offset;
+    if (x + w > window.innerWidth - margin) x = e.clientX - w - offset;
+
+    let y = e.clientY - h / 2; // vertically centred on the cursor
+    y = Math.max(margin, Math.min(y, window.innerHeight - h - margin));
+
+    preview.style.left = Math.max(margin, x) + 'px';
+    preview.style.top = y + 'px';
+  }
+
+  /**
+   * Load the full-size cover of a tile and show it.
+   *
+   * @param {HTMLAnchorElement} tileLink  Album link wrapping the thumbnail.
+   * @param {{clientX: number, clientY: number}} e  Pointer position.
+   */
+  function show(tileLink, e) {
+    const img = tileLink.querySelector('img');
+    if (!img) return;
+
+    const url = imgUrl(img);
+    previewImg.onload = () => { preview.style.display = 'block'; position(e); };
+    // If "big" does not exist for this photo, fall back to the thumbnail URL.
+    previewImg.onerror = () => { if (previewImg.src !== url) previewImg.src = url; };
+    previewImg.src = withSize(url, 'big');
+
+    // Cached image: onload may not fire again, so show immediately.
+    if (previewImg.complete && previewImg.naturalWidth) {
+      preview.style.display = 'block';
+      position(e);
+    }
+  }
+
+  /** Hide the preview and cancel any pending show. */
+  function hide() {
+    clearTimeout(timer);
+    currentTile = null;
+    preview.style.display = 'none';
+  }
+
+  // Event delegation: one set of listeners for the whole page instead of one
+  // per tile, so tiles added later work without extra setup.
+  document.addEventListener('mouseover', (e) => {
+    const link = e.target.closest && e.target.closest(ALBUM_LINK);
+    if (!link || !link.querySelector('img') || !link.closest('.yg-grid')) return;
+    if (link === currentTile) return;
+
+    currentTile = link;
+    clearTimeout(timer);
+    const pos = { clientX: e.clientX, clientY: e.clientY };
+    timer = setTimeout(() => show(link, pos), CONFIG.hoverDelay);
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (preview.style.display === 'block') position(e);
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const link = e.target.closest && e.target.closest(ALBUM_LINK);
+    // Ignore moves between children of the same tile.
+    if (link && link === currentTile && !link.contains(e.relatedTarget)) hide();
+  });
+
+  window.addEventListener('scroll', hide, { passive: true });
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+  enlarge();
+
+  // Re-run when the page adds or lazy-loads tiles (debounced).
+  let debounce;
+  new MutationObserver(() => {
+    clearTimeout(debounce);
+    debounce = setTimeout(enlarge, 250);
+  }).observe(document.body, { childList: true, subtree: true });
+})();
