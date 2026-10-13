@@ -7,6 +7,8 @@
 // @grant        none
 // @run-at       document-idle
 // @license      MIT
+// @downloadURL  https://raw.githubusercontent.com/mjazlowiecki/yupoo-gallery-plus/main/yupoo-gallery-plus.user.js
+// @updateURL    https://raw.githubusercontent.com/mjazlowiecki/yupoo-gallery-plus/main/yupoo-gallery-plus.user.js
 // ==/UserScript==
 
 /**

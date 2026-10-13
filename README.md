@@ -5,7 +5,13 @@ A small userscript that makes browsing [Yupoo](https://yupoo.com) galleries less
 - **Larger album tiles**: responsive grid with higher-resolution thumbnails.
 - **Hover preview**: move the cursor over an album to see its cover in full size, without opening it.
 
-<!-- TODO: add a before/after screenshot or a short GIF here (docs/demo.gif) -->
+## Demo
+
+| Before | After |
+| :---: | :---: |
+| ![Before: default Yupoo grid](imgs/before.png) | ![After: larger tiles](imgs/after.png) |
+
+![Hover preview demo](imgs/demo.gif)
 
 ## Install
 
