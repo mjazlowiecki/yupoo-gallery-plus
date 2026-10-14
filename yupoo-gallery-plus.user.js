@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.1.2
+// @version      0.1.3
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        none
@@ -34,6 +34,7 @@
     previewMaxW: 560,  // px, max width of the hover preview
     previewMaxH: 760,  // px, max height of the hover preview
     hoverDelay: 120,   // ms, delay before the preview shows (avoids flicker)
+    tileAspect: '1 / 1', // CSS aspect-ratio of tile images, e.g. '3 / 4' for portrait covers
   };
 
   /** Selector for links that point to an album page. */
@@ -61,7 +62,7 @@
     .yg-tile img {
       width: 100% !important;
       height: auto !important;
-      aspect-ratio: 1 / 1;
+      aspect-ratio: ${CONFIG.tileAspect};
       object-fit: cover;
       display: block;
     }

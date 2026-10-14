@@ -39,6 +39,7 @@ Edit the `CONFIG` object at the top of `yupoo-gallery-plus.user.js`:
 | `previewMaxW`   | `560`   | Max width of the hover preview in px                   |
 | `previewMaxH`   | `760`   | Max height of the hover preview in px                  |
 | `hoverDelay`    | `120`   | Delay before the preview appears, in ms                |
+| `tileAspect`    | `'1 / 1'` | CSS aspect ratio of tile images (e.g. `'3 / 4'` for portrait covers) |
 
 ## How it works
 
