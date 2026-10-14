@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.1.1
+// @version      0.1.2
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        none
@@ -78,8 +78,7 @@
     #yg-preview img {
       display: block;
       max-width: ${CONFIG.previewMaxW}px;
-      max-height: ${CONFIG.previewMaxH}px;
-      border-radius: 4px;
+      max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 28px));      border-radius: 4px;
     }
   `;
   document.head.appendChild(style);
@@ -210,21 +209,25 @@
    * @param {{clientX: number, clientY: number}} e  Pointer position.
    */
   function show(tileLink, e) {
-    const img = tileLink.querySelector('img');
-    if (!img) return;
+  const img = tileLink.querySelector('img');
+  if (!img) return;
 
-    const url = imgUrl(img);
-    previewImg.onload = () => { preview.style.display = 'block'; position(e); };
-    // If "big" does not exist for this photo, fall back to the thumbnail URL.
-    previewImg.onerror = () => { if (previewImg.src !== url) previewImg.src = url; };
-    previewImg.src = withSize(url, 'big');
+  const url = imgUrl(img);
 
-    // Cached image: onload may not fire again, so show immediately.
-    if (previewImg.complete && previewImg.naturalWidth) {
-      preview.style.display = 'block';
-      position(e);
-    }
-  }
+  const reveal = () => {
+    if (currentTile !== tileLink) return; // pointer already left or moved to another tile
+    preview.style.display = 'block';
+    position(e);
+  };
+
+  previewImg.onload = reveal;
+  // If "big" does not exist for this photo, fall back to the thumbnail URL.
+  previewImg.onerror = () => { if (previewImg.src !== url) previewImg.src = url; };
+  previewImg.src = withSize(url, 'big');
+
+  // Cached image: onload may not fire again, so show immediately.
+  if (previewImg.complete && previewImg.naturalWidth) reveal();
+}
 
   /** Hide the preview and cancel any pending show. */
   function hide() {
