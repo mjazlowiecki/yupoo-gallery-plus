@@ -30,7 +30,7 @@
   // ---------------------------------------------------------------------------
   // Configuration
   // ---------------------------------------------------------------------------
-    const DEFAULTS = {
+  const DEFAULTS = {
     tileMinWidth: 300,
     gap: 16,
     previewMaxW: 560,
@@ -40,28 +40,33 @@
     previewEnabled: true,
   };
 
-/** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
+  /** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
   const store = {
     get(key, fallback) {
       try {
         if (typeof GM_getValue === 'function') return GM_getValue(key, fallback);
         const raw = localStorage.getItem('yg:' + key);
         return raw === null ? fallback : JSON.parse(raw);
-      } catch { return fallback; }
+      } catch {
+        return fallback;
+      }
     },
     set(key, value) {
       try {
         if (typeof GM_setValue === 'function') GM_setValue(key, value);
         else localStorage.setItem('yg:' + key, JSON.stringify(value));
-      } catch { /* storage unavailable: settings just won't persist */ }
+      } catch {
+        /* storage unavailable: settings just won't persist */
+      }
     },
   };
 
   const CONFIG = { ...DEFAULTS, ...store.get('config', {}) };
-  const saveConfig = () => store.set(
-    'config',
-    Object.fromEntries(Object.entries(CONFIG).filter(([k, v]) => v !== DEFAULTS[k]))
-  );
+  const saveConfig = () =>
+    store.set(
+      'config',
+      Object.fromEntries(Object.entries(CONFIG).filter(([k, v]) => v !== DEFAULTS[k]))
+    );
 
   /** Selector for links that point to an album page. */
   const ALBUM_LINK = 'a[href*="/albums/"]';
@@ -72,7 +77,7 @@
   // !important is needed because the Yupoo's own stylesheet sets fixed tile sizes.
   const style = document.createElement('style');
   const renderStyles = () => {
-  style.textContent = `
+    style.textContent = `
     .yg-grid {
       display: grid !important;
       grid-template-columns: repeat(auto-fill, minmax(${CONFIG.tileMinWidth}px, 1fr)) !important;
@@ -122,10 +127,9 @@
     }
     #yg-preview .yg-caption:empty { display: none; }
     `;
-};
-renderStyles();
-document.head.appendChild(style);
-
+  };
+  renderStyles();
+  document.head.appendChild(style);
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -153,7 +157,7 @@ document.head.appendChild(style);
     const u = img.getAttribute('data-origin-src') || img.currentSrc || img.src || '';
     return u.startsWith('//') ? location.protocol + u : u;
   };
-  
+
   /**
    * Best-effort album title for a tile: link title, image alt, or the tile's visible text.
    *
@@ -208,15 +212,21 @@ document.head.appendChild(style);
     [...grid.children].forEach((child) => child.classList.add('yg-tile'));
 
     grid.querySelectorAll('img').forEach((img) => {
-    if (img.dataset.ygUp) return; // already processed
-    const url = imgUrl(img);
-    if (!/photo\.yupoo\.com/.test(url)) return; // only touch Yupoo photos
+      if (img.dataset.ygUp) return; // already processed
+      const url = imgUrl(img);
+      if (!/photo\.yupoo\.com/.test(url)) return; // only touch Yupoo photos
 
       img.dataset.ygUp = '1';
       const bigger = withSize(url, 'medium');
       if (bigger !== url) {
         // Fall back to the original thumbnail if the larger size 404s.
-        img.addEventListener('error', () => { img.src = url; }, { once: true });
+        img.addEventListener(
+          'error',
+          () => {
+            img.src = url;
+          },
+          { once: true }
+        );
         img.src = bigger;
       }
     });
@@ -266,7 +276,7 @@ document.head.appendChild(style);
    * @param {HTMLAnchorElement} tileLink  Album link wrapping the thumbnail.
    * @param {{clientX: number, clientY: number}} e  Pointer position.
    */
-    function show(tileLink, e) {
+  function show(tileLink, e) {
     const img = tileLink.querySelector('img');
     if (!img) return;
 
@@ -322,24 +332,44 @@ document.head.appendChild(style);
   });
 
   window.addEventListener('scroll', hide, { passive: true });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+  });
   // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
   if (typeof GM_registerMenuCommand === 'function') {
-  const change = (fn) => () => { fn(); saveConfig(); renderStyles(); };
-  GM_registerMenuCommand('Tiles: bigger', change(() => {
-    CONFIG.tileMinWidth = Math.min(600, CONFIG.tileMinWidth + 50);
-  }));
-  GM_registerMenuCommand('Tiles: smaller', change(() => {
-    CONFIG.tileMinWidth = Math.max(150, CONFIG.tileMinWidth - 50);
-  }));
-  GM_registerMenuCommand('Toggle hover preview', change(() => {
-    CONFIG.previewEnabled = !CONFIG.previewEnabled;
-    if (!CONFIG.previewEnabled) hide();
-  }));
-  GM_registerMenuCommand('Reset settings', change(() => { Object.assign(CONFIG, DEFAULTS); }));
-}
+    const change = (fn) => () => {
+      fn();
+      saveConfig();
+      renderStyles();
+    };
+    GM_registerMenuCommand(
+      'Tiles: bigger',
+      change(() => {
+        CONFIG.tileMinWidth = Math.min(600, CONFIG.tileMinWidth + 50);
+      })
+    );
+    GM_registerMenuCommand(
+      'Tiles: smaller',
+      change(() => {
+        CONFIG.tileMinWidth = Math.max(150, CONFIG.tileMinWidth - 50);
+      })
+    );
+    GM_registerMenuCommand(
+      'Toggle hover preview',
+      change(() => {
+        CONFIG.previewEnabled = !CONFIG.previewEnabled;
+        if (!CONFIG.previewEnabled) hide();
+      })
+    );
+    GM_registerMenuCommand(
+      'Reset settings',
+      change(() => {
+        Object.assign(CONFIG, DEFAULTS);
+      })
+    );
+  }
   enlarge();
 
   // Re-run when the page adds or lazy-loads tiles (debounced).
