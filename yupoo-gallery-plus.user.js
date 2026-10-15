@@ -106,9 +106,21 @@
     #yg-preview img {
       display: block;
       max-width: ${CONFIG.previewMaxW}px;
-      max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 28px));
+      max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 68px));
       border-radius: 4px;
     }
+    #yg-preview .yg-caption {
+      margin: 6px 2px 0;
+      max-width: ${CONFIG.previewMaxW}px;
+      font: 13px/1.3 system-ui, sans-serif;
+      color: #222;
+      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    #yg-preview .yg-caption:empty { display: none; }
     `;
 };
 renderStyles();
@@ -141,7 +153,19 @@ document.head.appendChild(style);
     const u = img.getAttribute('data-origin-src') || img.currentSrc || img.src || '';
     return u.startsWith('//') ? location.protocol + u : u;
   };
-
+  
+  /**
+   * Best-effort album title for a tile: link title, image alt, or the tile's visible text.
+   *
+   * @param {HTMLAnchorElement} link
+   * @param {HTMLImageElement} img
+   * @returns {string} Single-line title, at most 120 characters (empty if none found).
+   */
+  const captionOf = (link, img) => {
+    const tile = link.closest('.yg-tile') || link;
+    const raw = link.getAttribute('title') || img.alt || tile.textContent || '';
+    return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+  };
   /**
    * Find the element that contains all album tiles.
    *
@@ -184,9 +208,9 @@ document.head.appendChild(style);
     [...grid.children].forEach((child) => child.classList.add('yg-tile'));
 
     grid.querySelectorAll('img').forEach((img) => {
-      if (img.dataset.ygUp) return; // already processed
-      const url = imgUrl(img);
-      if (!/photo\.yupoo\.com/.test(url)) return; // only touch Yupoo photos
+    if (img.dataset.ygUp) return; // already processed
+    const url = imgUrl(img);
+    if (!/photo\.yupoo\.com/.test(url)) return; // only touch Yupoo photos
 
       img.dataset.ygUp = '1';
       const bigger = withSize(url, 'medium');
@@ -204,7 +228,9 @@ document.head.appendChild(style);
   const preview = document.createElement('div');
   preview.id = 'yg-preview';
   const previewImg = document.createElement('img');
-  preview.appendChild(previewImg);
+  const previewCaption = document.createElement('div');
+  previewCaption.className = 'yg-caption';
+  preview.append(previewImg, previewCaption);
   document.body.appendChild(preview);
 
   /** @type {number | null} Pending "show preview" timeout. */
@@ -240,26 +266,29 @@ document.head.appendChild(style);
    * @param {HTMLAnchorElement} tileLink  Album link wrapping the thumbnail.
    * @param {{clientX: number, clientY: number}} e  Pointer position.
    */
-  function show(tileLink, e) {
-  const img = tileLink.querySelector('img');
-  if (!img) return;
+    function show(tileLink, e) {
+    const img = tileLink.querySelector('img');
+    if (!img) return;
 
-  const url = imgUrl(img);
+    const url = imgUrl(img);
+    previewCaption.textContent = captionOf(tileLink, img);
 
-  const reveal = () => {
-    if (currentTile !== tileLink) return; // pointer already left or moved to another tile
-    preview.style.display = 'block';
-    position(e);
-  };
+    const reveal = () => {
+      if (currentTile !== tileLink) return; // pointer already left or moved to another tile
+      preview.style.display = 'block';
+      position(e);
+    };
 
-  previewImg.onload = reveal;
-  // If "big" does not exist for this photo, fall back to the thumbnail URL.
-  previewImg.onerror = () => { if (previewImg.src !== url) previewImg.src = url; };
-  previewImg.src = withSize(url, 'big');
+    previewImg.onload = reveal;
+    // If "big" does not exist for this photo, fall back to the thumbnail URL.
+    previewImg.onerror = () => {
+      if (previewImg.src !== url) previewImg.src = url;
+    };
+    previewImg.src = withSize(url, 'big');
 
-  // Cached image: onload may not fire again, so show immediately.
-  if (previewImg.complete && previewImg.naturalWidth) reveal();
-}
+    // Cached image: onload may not fire again, so show immediately.
+    if (previewImg.complete && previewImg.naturalWidth) reveal();
+  }
 
   /** Hide the preview and cancel any pending show. */
   function hide() {
