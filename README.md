@@ -30,7 +30,11 @@ A small userscript that makes browsing [Yupoo](https://yupoo.com) galleries less
 
 ## Configuration
 
-Edit the `CONFIG` object at the top of `yupoo-gallery-plus.user.js`:
+In a userscript manager, the Tampermonkey menu lets you resize tiles, toggle the preview and reset
+settings; choices are saved between visits. In the unpacked-extension build there is no menu yet,
+so edit `DEFAULTS` at the top of the script instead.
+
+Edit the DEFAULTS object at the top of `yupoo-gallery-plus.user.js`:
 
 | Option          | Default | Description                                            |
 | --------------- | ------- | ------------------------------------------------------ |
@@ -39,7 +43,8 @@ Edit the `CONFIG` object at the top of `yupoo-gallery-plus.user.js`:
 | `previewMaxW`   | `560`   | Max width of the hover preview in px                   |
 | `previewMaxH`   | `760`   | Max height of the hover preview in px                  |
 | `hoverDelay`    | `120`   | Delay before the preview appears, in ms                |
-| `tileAspect`    | `'1 / 1'` | CSS aspect ratio of tile images (e.g. `'3 / 4'` for portrait covers) |
+| `tileAspect`    | `'1 / 1'` | CSS aspect ratio of tile images (e.g. `'3 / 4'` for portrait covers) 
+| `previewEnabled` | `true` | Whether the hover preview is shown (toggle from the Tampermonkey menu) |
 
 ## How it works
 

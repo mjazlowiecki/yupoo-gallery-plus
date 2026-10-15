@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.1.3
+// @version      0.2.0
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @run-at       document-idle
 // @license      MIT
 // @downloadURL  https://raw.githubusercontent.com/mjazlowiecki/yupoo-gallery-plus/main/yupoo-gallery-plus.user.js
@@ -28,14 +30,38 @@
   // ---------------------------------------------------------------------------
   // Configuration
   // ---------------------------------------------------------------------------
-  const CONFIG = {
-    tileMinWidth: 300, // px, minimum tile width; larger value = fewer, bigger tiles
-    gap: 16,           // px, gap between tiles
-    previewMaxW: 560,  // px, max width of the hover preview
-    previewMaxH: 760,  // px, max height of the hover preview
-    hoverDelay: 120,   // ms, delay before the preview shows (avoids flicker)
-    tileAspect: '1 / 1', // CSS aspect-ratio of tile images, e.g. '3 / 4' for portrait covers
+    const DEFAULTS = {
+    tileMinWidth: 300,
+    gap: 16,
+    previewMaxW: 560,
+    previewMaxH: 760,
+    hoverDelay: 120,
+    tileAspect: '1 / 1',
+    previewEnabled: true,
   };
+
+/** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
+  const store = {
+    get(key, fallback) {
+      try {
+        if (typeof GM_getValue === 'function') return GM_getValue(key, fallback);
+        const raw = localStorage.getItem('yg:' + key);
+        return raw === null ? fallback : JSON.parse(raw);
+      } catch { return fallback; }
+    },
+    set(key, value) {
+      try {
+        if (typeof GM_setValue === 'function') GM_setValue(key, value);
+        else localStorage.setItem('yg:' + key, JSON.stringify(value));
+      } catch { /* storage unavailable: settings just won't persist */ }
+    },
+  };
+
+  const CONFIG = { ...DEFAULTS, ...store.get('config', {}) };
+  const saveConfig = () => store.set(
+    'config',
+    Object.fromEntries(Object.entries(CONFIG).filter(([k, v]) => v !== DEFAULTS[k]))
+  );
 
   /** Selector for links that point to an album page. */
   const ALBUM_LINK = 'a[href*="/albums/"]';
@@ -45,6 +71,7 @@
   // ---------------------------------------------------------------------------
   // !important is needed because the Yupoo's own stylesheet sets fixed tile sizes.
   const style = document.createElement('style');
+  const renderStyles = () => {
   style.textContent = `
     .yg-grid {
       display: grid !important;
@@ -79,10 +106,14 @@
     #yg-preview img {
       display: block;
       max-width: ${CONFIG.previewMaxW}px;
-      max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 28px));      border-radius: 4px;
+      max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 28px));
+      border-radius: 4px;
     }
-  `;
-  document.head.appendChild(style);
+    `;
+};
+renderStyles();
+document.head.appendChild(style);
+
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -240,6 +271,7 @@
   // Event delegation: one set of listeners for the whole page instead of one
   // per tile, so tiles added later work without extra setup.
   document.addEventListener('mouseover', (e) => {
+    if (!CONFIG.previewEnabled) return;
     const link = e.target.closest && e.target.closest(ALBUM_LINK);
     if (!link || !link.querySelector('img') || !link.closest('.yg-grid')) return;
     if (link === currentTile) return;
@@ -261,10 +293,24 @@
   });
 
   window.addEventListener('scroll', hide, { passive: true });
-
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
   // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
+  if (typeof GM_registerMenuCommand === 'function') {
+  const change = (fn) => () => { fn(); saveConfig(); renderStyles(); };
+  GM_registerMenuCommand('Tiles: bigger', change(() => {
+    CONFIG.tileMinWidth = Math.min(600, CONFIG.tileMinWidth + 50);
+  }));
+  GM_registerMenuCommand('Tiles: smaller', change(() => {
+    CONFIG.tileMinWidth = Math.max(150, CONFIG.tileMinWidth - 50);
+  }));
+  GM_registerMenuCommand('Toggle hover preview', change(() => {
+    CONFIG.previewEnabled = !CONFIG.previewEnabled;
+    if (!CONFIG.previewEnabled) hide();
+  }));
+  GM_registerMenuCommand('Reset settings', change(() => { Object.assign(CONFIG, DEFAULTS); }));
+}
   enlarge();
 
   // Re-run when the page adds or lazy-loads tiles (debounced).
