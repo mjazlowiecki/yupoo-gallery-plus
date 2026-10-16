@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.2.0
+// @version      0.4.0
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        GM_getValue
@@ -38,6 +38,10 @@
     hoverDelay: 120,
     tileAspect: '1 / 1',
     previewEnabled: true,
+    currency: 'PLN', // target currency (ISO code)
+    cnyRate: 0.55, // 1 CNY in the target currency; change from the menu
+    showPrices: true,
+    bareNumberIsCny: false, // treat a leading bare number ("138 be123") as CNY
   };
 
   /** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
@@ -90,7 +94,20 @@
       max-width: none !important;
       margin: 0 !important;
       float: none !important;
+      position: relative;
     }
+    .yg-price {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 2;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font: 600 12px/1.5 system-ui, sans-serif;
+      pointer-events: none; /* keep hover on the tile working */
+  }
     .yg-tile img {
       width: 100% !important;
       height: auto !important;
@@ -158,6 +175,43 @@
     return u.startsWith('//') ? location.protocol + u : u;
   };
 
+  /** Patterns sellers use for a CNY price in an album title (first match wins). */
+  const PRICE_PATTERNS = [
+    /[\uFFE5\u00A5]\s*(\d+(?:[.,]\d+)?)/, // ￥138, ¥138
+    /(\d+(?:[.,]\d+)?)\s*(?:RMB|CNY|\u5143)/i, // 138RMB, 138 元
+    /(?:RMB|CNY)\s*(\d+(?:[.,]\d+)?)/i, // RMB 138
+  ];
+
+  /**
+   * Extract a CNY price from an album title.
+   *
+   * @param {string} title
+   * @returns {number | null} Price in CNY, or null if none was recognised.
+   */
+  const parsePriceCny = (title) => {
+    for (const re of PRICE_PATTERNS) {
+      const m = title.match(re);
+      if (m) return parseFloat(m[1].replace(',', '.'));
+    }
+    if (CONFIG.bareNumberIsCny) {
+      const m = title.match(/^\s*(\d{2,4})(?![\w.])/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  };
+
+  /**
+   * @param {number} cny  Price in CNY.
+   * @returns {string} Converted price, e.g. "≈ 76 zł".
+   */
+  const formatPrice = (cny) =>
+    '≈ ' +
+    new Intl.NumberFormat(navigator.language, {
+      style: 'currency',
+      currency: CONFIG.currency,
+      maximumFractionDigits: 0,
+    }).format(cny * CONFIG.cnyRate);
+
   /**
    * Best-effort album title for a tile: link title, image alt, or the tile's visible text.
    *
@@ -167,6 +221,9 @@
    */
   const captionOf = (link, img) => {
     const tile = link.closest('.yg-tile') || link;
+    const cny = tile && tile.dataset.ygCny;
+    previewCaption.textContent =
+      captionOf(tileLink, img) + (CONFIG.showPrices && cny ? '  ' + formatPrice(Number(cny)) : '');
     const raw = link.getAttribute('title') || img.alt || tile.textContent || '';
     return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
   };
@@ -200,6 +257,37 @@
   // ---------------------------------------------------------------------------
 
   /**
+   * Create or refresh the price badge of a tile. The CNY price is parsed once and
+   * cached in data-yg-cny; later calls only re-render (e.g. after the rate changed).
+   *
+   * @param {HTMLElement} tile  Grid child wrapping one album.
+   */
+  function updatePriceBadge(tile) {
+    if (tile.dataset.ygCny === undefined) {
+      const link = tile.querySelector(ALBUM_LINK);
+      const title = (link && link.getAttribute('title')) || tile.textContent || '';
+      const cny = parsePriceCny(title);
+      tile.dataset.ygCny = cny === null ? '' : String(cny);
+    }
+
+    let badge = tile.querySelector(':scope > .yg-price');
+    if (!CONFIG.showPrices || tile.dataset.ygCny === '') {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'yg-price';
+      tile.appendChild(badge);
+    }
+    const text = formatPrice(Number(tile.dataset.ygCny));
+    // Only touch the DOM when the text changed, otherwise the MutationObserver loops.
+    if (badge.textContent !== text) badge.textContent = text;
+  }
+
+  const renderPrices = () => document.querySelectorAll('.yg-tile').forEach(updatePriceBadge);
+
+  /**
    * Apply the grid layout and upgrade thumbnails to a higher resolution.
    * Safe to call repeatedly: already-upgraded images are skipped.
    */
@@ -209,7 +297,10 @@
 
     const { grid } = found;
     grid.classList.add('yg-grid');
-    [...grid.children].forEach((child) => child.classList.add('yg-tile'));
+    [...grid.children].forEach((child) => {
+      child.classList.add('yg-tile');
+      updatePriceBadge(child);
+    });
 
     grid.querySelectorAll('img').forEach((img) => {
       if (img.dataset.ygUp) return; // already processed
@@ -335,6 +426,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hide();
   });
+
   // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
@@ -343,6 +435,7 @@
       fn();
       saveConfig();
       renderStyles();
+      renderPrices();
     };
     GM_registerMenuCommand(
       'Tiles: bigger',
@@ -369,6 +462,21 @@
         Object.assign(CONFIG, DEFAULTS);
       })
     );
+    GM_registerMenuCommand(
+      'Toggle price badges',
+      change(() => {
+        CONFIG.showPrices = !CONFIG.showPrices;
+      })
+    );
+    GM_registerMenuCommand('Set CNY rate…', () => {
+      const v = parseFloat(
+        String(prompt(`1 CNY in ${CONFIG.currency}:`, CONFIG.cnyRate)).replace(',', '.')
+      );
+      if (v > 0)
+        change(() => {
+          CONFIG.cnyRate = v;
+        })();
+    });
   }
   enlarge();
 
