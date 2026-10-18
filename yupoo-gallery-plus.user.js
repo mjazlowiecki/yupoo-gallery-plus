@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.4.0
+// @version      0.5.0
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        GM_getValue
@@ -42,6 +42,9 @@
     cnyRate: 0.55, // 1 CNY in the target currency; change from the menu
     showPrices: true,
     bareNumberIsCny: false, // treat a leading bare number ("138 be123") as CNY
+    showDates: true,
+    dateSamples: 6, // albums fetched per page to calibrate date estimates (min 2)
+    maxAgeYears: 0, // hide albums older than this many years (0 = no filter)
   };
 
   /** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
@@ -96,10 +99,10 @@
       float: none !important;
       position: relative;
     }
-    .yg-price {
+    .yg-price,
+    .yg-date {
       position: absolute;
       top: 8px;
-      left: 8px;
       z-index: 2;
       padding: 2px 8px;
       border-radius: 999px;
@@ -107,7 +110,23 @@
       color: #fff;
       font: 600 12px/1.5 system-ui, sans-serif;
       pointer-events: none; /* keep hover on the tile working */
-  }
+    }
+    .yg-price { left: 8px; }
+    .yg-date { right: 8px; }
+    .yg-old { display: none !important; }
+    #yg-bar {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 2147483646;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #fff;
+      color: #222;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      font: 13px system-ui, sans-serif;
+    }
+    #yg-bar select { font: inherit; border: 0; background: transparent; }
     .yg-tile img {
       width: 100% !important;
       height: auto !important;
@@ -302,6 +321,10 @@
       updatePriceBadge(child);
     });
 
+    if (CONFIG.showDates && !bar.isConnected) document.body.appendChild(bar);
+    renderDates();
+    loadDates();
+
     grid.querySelectorAll('img').forEach((img) => {
       if (img.dataset.ygUp) return; // already processed
       const url = imgUrl(img);
@@ -428,6 +451,149 @@
   });
 
   // ---------------------------------------------------------------------------
+  // Feature 3: album dates and age filter
+  // ---------------------------------------------------------------------------
+  // The listing has no dates, but every album page carries "datePublished" in its
+  // JSON-LD. Albums are ~220 KB each, so we fetch only a few per page and
+  // interpolate the rest from the (global, increasing) album ids.
+  const DAY = 86400000;
+  /** @type {Record<string, string>} Real dates fetched so far: album id -> 'YYYY-MM-DD'. */
+  const knownDates = store.get('dates', {});
+  /** Ids whose fetch failed in this session, so a broken request is not retried in a loop. */
+  const failedIds = new Set();
+  let datesBusy = false;
+
+  /**
+   * @param {HTMLElement} tile
+   * @returns {number | null} Album id taken from the tile's link.
+   */
+  const idOf = (tile) => {
+    const link = tile.querySelector(ALBUM_LINK);
+    const m = link && link.getAttribute('href').match(/\/albums\/(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+
+  /**
+   * @param {string} url  Album page URL.
+   * @returns {Promise<string | null>} Publish date as 'YYYY-MM-DD', if found.
+   */
+  async function fetchAlbumDate(url) {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const m = (await res.text()).match(/"datePublished"\s*:\s*"(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : null;
+  }
+
+  /**
+   * Linear interpolation between the two known albums surrounding `id`.
+   *
+   * @param {number} id
+   * @param {Array<[number, number]>} list  Known [id, timestamp] pairs sorted by id.
+   * @returns {number | null} Timestamp in ms, or null outside the known range.
+   */
+  function estimateTime(id, list) {
+    let lo = null;
+    let hi = null;
+    for (const a of list) {
+      if (a[0] <= id) lo = a;
+      else {
+        hi = a;
+        break;
+      }
+    }
+    if (lo && lo[0] === id) return lo[1];
+    if (!lo || !hi) return null; // never extrapolate
+    return lo[1] + ((id - lo[0]) / (hi[0] - lo[0])) * (hi[1] - lo[1]);
+  }
+
+  /** Up to `n` tiles evenly spaced by album id, always including the oldest and newest. */
+  function pickSamples(tiles, n) {
+    const sorted = tiles.filter((t) => idOf(t) !== null).sort((a, b) => idOf(a) - idOf(b));
+    if (sorted.length <= n) return sorted;
+    return Array.from(
+      { length: n },
+      (_, i) => sorted[Math.round((i * (sorted.length - 1)) / (n - 1))]
+    );
+  }
+
+  // Small control: hide albums older than N years.
+  const bar = document.createElement('label');
+  bar.id = 'yg-bar';
+  bar.append('Age: ');
+  const ageSelect = document.createElement('select');
+  [
+    [0, 'any'],
+    [1, '≤ 1 year'],
+    [2, '≤ 2 years'],
+    [3, '≤ 3 years'],
+    [5, '≤ 5 years'],
+  ].forEach(([v, text]) => ageSelect.add(new Option(text, v)));
+  ageSelect.value = String(CONFIG.maxAgeYears);
+  ageSelect.addEventListener('change', () => {
+    CONFIG.maxAgeYears = Number(ageSelect.value);
+    saveConfig();
+    renderDates();
+  });
+  bar.append(ageSelect);
+
+  /** Show date badges and hide albums older than the chosen age. Safe to call repeatedly. */
+  function renderDates() {
+    bar.style.display = CONFIG.showDates ? '' : 'none';
+    const list = Object.entries(knownDates)
+      .map(([id, d]) => [Number(id), Date.parse(d)])
+      .filter(([, t]) => !Number.isNaN(t))
+      .sort((a, b) => a[0] - b[0]);
+    const cutoff = CONFIG.maxAgeYears > 0 ? Date.now() - CONFIG.maxAgeYears * 365.25 * DAY : null;
+
+    document.querySelectorAll('.yg-tile').forEach((tile) => {
+      const id = idOf(tile);
+      const t = CONFIG.showDates && id !== null ? estimateTime(id, list) : null;
+      tile.classList.toggle('yg-old', cutoff !== null && t !== null && t < cutoff);
+
+      let badge = tile.querySelector(':scope > .yg-date');
+      if (t === null) {
+        if (badge) badge.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'yg-date';
+        tile.appendChild(badge);
+      }
+      const text = knownDates[id] || '~' + new Date(t).toISOString().slice(0, 7);
+      if (badge.textContent !== text) badge.textContent = text; // avoid MutationObserver loops
+    });
+  }
+
+  /** Fetch the real date of a few sample albums on this page, then re-render. */
+  async function loadDates() {
+    if (datesBusy || !CONFIG.showDates) return;
+    datesBusy = true;
+    try {
+      const tiles = [...document.querySelectorAll('.yg-tile')];
+      for (const tile of pickSamples(tiles, Math.max(2, CONFIG.dateSamples))) {
+        const id = idOf(tile);
+        if (knownDates[id] || failedIds.has(id)) continue;
+        try {
+          const date = await fetchAlbumDate(tile.querySelector(ALBUM_LINK).href);
+          if (date) {
+            knownDates[id] = date;
+            store.set('dates', knownDates);
+            renderDates();
+          } else {
+            failedIds.add(id);
+          }
+        } catch {
+          failedIds.add(id); // network or HTTP error: skip this sample
+        }
+        await new Promise((resolve) => setTimeout(resolve, 400)); // be gentle with the server
+      }
+    } finally {
+      datesBusy = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
   if (typeof GM_registerMenuCommand === 'function') {
@@ -436,6 +602,8 @@
       saveConfig();
       renderStyles();
       renderPrices();
+      renderDates();
+      loadDates();
     };
     GM_registerMenuCommand(
       'Tiles: bigger',
@@ -466,6 +634,12 @@
       'Toggle price badges',
       change(() => {
         CONFIG.showPrices = !CONFIG.showPrices;
+      })
+    );
+    GM_registerMenuCommand(
+      'Toggle album dates',
+      change(() => {
+        CONFIG.showDates = !CONFIG.showDates;
       })
     );
     GM_registerMenuCommand('Set CNY rate…', () => {
