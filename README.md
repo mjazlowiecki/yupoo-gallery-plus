@@ -51,22 +51,23 @@ Choices are saved between visits. The unpacked-extension build has no menu, so t
 
 Edit the `DEFAULTS` object at the top of `yupoo-gallery-plus.user.js`:
 
-| Option            | Default   | Description                                                              |
-| ----------------- | --------- | ------------------------------------------------------------------------ |
-| `tileMinWidth`    | `300`     | Minimum tile width in px. Higher = fewer, bigger tiles                   |
-| `gap`             | `16`      | Gap between tiles in px                                                  |
-| `previewMaxW`     | `560`     | Max width of the hover preview in px                                     |
-| `previewMaxH`     | `760`     | Max height of the hover preview in px                                    |
-| `hoverDelay`      | `120`     | Delay before the preview appears, in ms                                  |
-| `tileAspect`      | `'1 / 1'` | CSS aspect ratio of tile images (e.g. `'3 / 4'` for portrait covers)     |
-| `previewEnabled`  | `true`    | Whether the hover preview is shown                                       |
-| `showPrices`      | `true`    | Show converted price badges                                              |
-| `currency`        | `'PLN'`   | Target currency (ISO code)                                               |
-| `cnyRate`         | `0.55`    | Value of 1 CNY in the target currency. **Update it to the current rate** |
-| `bareNumberIsCny` | `false`   | Treat a leading bare number in the title (`138 be123`) as a CNY price    |
-| `showDates`       | `true`    | Show date badges, the age selector, and fetch sample dates               |
-| `dateSamples`     | `6`       | Albums fetched per page to calibrate date estimates (minimum 2)          |
-| `maxAgeYears`     | `0`       | Hide albums older than this many years (`0` = no filter)                 |
+| Option            | Default     | Description                                                                        |
+| ----------------- | ----------- | ---------------------------------------------------------------------------------- |
+| `tileMinWidth`    | `300`       | Minimum tile width in px. Higher = fewer, bigger tiles                             |
+| `gap`             | `16`        | Gap between tiles in px                                                            |
+| `previewMaxW`     | `560`       | Max width of the hover preview in px                                               |
+| `previewMaxH`     | `760`       | Max height of the hover preview in px                                              |
+| `hoverDelay`      | `120`       | Delay before the preview appears, in ms                                            |
+| `tileAspect`      | `'1 / 1'`   | CSS aspect ratio of tile images (e.g. `'3 / 4'` for portrait covers)               |
+| `previewEnabled`  | `true`      | Whether the hover preview is shown                                                 |
+| `showPrices`      | `true`      | Show converted price badges                                                        |
+| `currency`        | `'PLN'`     | Target currency (ISO code)                                                         |
+| `cnyRate`         | `0.55`      | Value of 1 CNY in the target currency. **Update it to the current rate**           |
+| `bareNumberIsCny` | `false`     | Treat a leading bare number in the title (`138 be123`) as a CNY price              |
+| `showDates`       | `true`      | Show date badges, the age selector, and fetch sample dates                         |
+| `dateSamples`     | `6`         | Albums fetched per page to calibrate date estimates (minimum 2)                    |
+| `maxAgeYears`     | `0`         | Hide albums older than this many years (`0` = no filter)                           |
+| `sort`            | `'default'` | Order of albums on the page: `default`, `newest`, `oldest`, `cheapest`, `priciest` |
 
 ## How it works
 
@@ -96,6 +97,7 @@ Edit the `DEFAULTS` object at the top of `yupoo-gallery-plus.user.js`:
 - Built against the current Yupoo markup. If the site changes its HTML, selectors may need updating.
 - In the extension build, settings and cached dates are stored per Yupoo subdomain.
 - Tested on Chromium-based browsers with Tampermonkey.
+- Sorting applies only to the albums loaded on the current page (up to 120 on Yupoo), not the whole category. Albums without a recognised price go last when sorting by price.
 
 ## Contributing
 

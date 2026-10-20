@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.5.0
+// @version      0.6.0
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        GM_getValue
@@ -45,6 +45,7 @@
     showDates: true,
     dateSamples: 6, // albums fetched per page to calibrate date estimates (min 2)
     maxAgeYears: 0, // hide albums older than this many years (0 = no filter)
+    sort: 'default', // 'default' | 'newest' | 'oldest' | 'cheapest' | 'priciest'
   };
 
   /** Persistent storage: GM_* in a userscript manager, localStorage in the extension build. */
@@ -150,6 +151,7 @@
       max-height: min(${CONFIG.previewMaxH}px, calc(100vh - 68px));
       border-radius: 4px;
     }
+    #yg-bar label + label { margin-left: 12px; }
     #yg-preview .yg-caption {
       margin: 6px 2px 0;
       max-width: ${CONFIG.previewMaxW}px;
@@ -321,8 +323,9 @@
       updatePriceBadge(child);
     });
 
-    if (CONFIG.showDates && !bar.isConnected) document.body.appendChild(bar);
+    if (!bar.isConnected) document.body.appendChild(bar);
     renderDates();
+    renderOrder();
     loadDates();
 
     grid.querySelectorAll('img').forEach((img) => {
@@ -515,11 +518,20 @@
       (_, i) => sorted[Math.round((i * (sorted.length - 1)) / (n - 1))]
     );
   }
+  const SORTS = [
+    ['default', 'Default'],
+    ['newest', 'Newest'],
+    ['oldest', 'Oldest'],
+    ['cheapest', 'Cheapest'],
+    ['priciest', 'Most expensive'],
+  ];
 
-  // Small control: hide albums older than N years.
-  const bar = document.createElement('label');
+  // Small control bar: age filter and sort order.
+  const bar = document.createElement('div');
   bar.id = 'yg-bar';
-  bar.append('Age: ');
+
+  const ageBox = document.createElement('label');
+  ageBox.append('Age: ');
   const ageSelect = document.createElement('select');
   [
     [0, 'any'],
@@ -534,11 +546,27 @@
     saveConfig();
     renderDates();
   });
-  bar.append(ageSelect);
+  ageBox.append(ageSelect);
+
+  const sortBox = document.createElement('label');
+  sortBox.append('Sort: ');
+  const sortSelect = document.createElement('select');
+  SORTS.forEach(([v, text]) => sortSelect.add(new Option(text, v)));
+  sortSelect.value = CONFIG.sort;
+  sortSelect.addEventListener('change', () => {
+    CONFIG.sort = sortSelect.value;
+    saveConfig();
+    renderOrder();
+  });
+  sortBox.append(sortSelect);
+
+  bar.append(ageBox, sortBox);
 
   /** Show date badges and hide albums older than the chosen age. Safe to call repeatedly. */
   function renderDates() {
-    bar.style.display = CONFIG.showDates ? '' : 'none';
+    ageBox.style.display = CONFIG.showDates ? '' : 'none';
+    ageSelect.value = String(CONFIG.maxAgeYears);
+    sortSelect.value = CONFIG.sort;
     const list = Object.entries(knownDates)
       .map(([id, d]) => [Number(id), Date.parse(d)])
       .filter(([, t]) => !Number.isNaN(t))
@@ -563,6 +591,40 @@
       const text = knownDates[id] || '~' + new Date(t).toISOString().slice(0, 7);
       if (badge.textContent !== text) badge.textContent = text; // avoid MutationObserver loops
     });
+  }
+
+  /**
+   * Reorder tiles visually with CSS `order` (the DOM order stays untouched).
+   * Albums without the needed data (no price / no id) go to the end.
+   * Newest/oldest use the album id, which grows with publish date.
+   */
+  function renderOrder() {
+    const tiles = [...document.querySelectorAll('.yg-tile')];
+    const price = (t) => (t.dataset.ygCny ? Number(t.dataset.ygCny) : null);
+    const id = (t) => idOf(t);
+    const keys = {
+      newest: (t) => (id(t) === null ? null : -id(t)),
+      oldest: id,
+      cheapest: price,
+      priciest: (t) => (price(t) === null ? null : -price(t)),
+    };
+    const keyFn = keys[CONFIG.sort];
+    if (!keyFn) {
+      // 'default' or an unknown stored value: keep Yupoo's own order
+      tiles.forEach((t) => {
+        t.style.order = '';
+      });
+      return;
+    }
+    tiles
+      .map((t) => {
+        const k = keyFn(t);
+        return [t, k === null ? Infinity : k];
+      })
+      .sort((a, b) => (a[1] === b[1] ? 0 : a[1] < b[1] ? -1 : 1))
+      .forEach(([t], rank) => {
+        t.style.order = String(rank);
+      });
   }
 
   /** Fetch the real date of a few sample albums on this page, then re-render. */

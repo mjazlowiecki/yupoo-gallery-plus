@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Yupoo Gallery+",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Larger album tiles and a hover preview for Yupoo galleries.",
   "content_scripts": [
     {
