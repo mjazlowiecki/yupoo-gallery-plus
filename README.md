@@ -103,6 +103,7 @@ Edit the `DEFAULTS` object at the top of `yupoo-gallery-plus.user.js`:
 
 Issues and pull requests are welcome. If something looks broken on a particular gallery page,
 please include the page URL and (if possible) the HTML of one album tile.
+See [CHANGELOG.md](./CHANGELOG.md) for the version history.
 
 ## Disclaimer
 
