@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] - 2026-10-21
+
+### Added
+
+- Search box that filters albums on the page by title, code or price.
+
 ## [0.6.0] - 2026-10-20
 
 ### Added

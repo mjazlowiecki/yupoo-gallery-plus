@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Yupoo Gallery+
 // @namespace    https://github.com/mjazlowiecki/yupoo-gallery-plus
-// @version      0.6.0
+// @version      0.7.0
 // @description  Larger album tiles and a hover preview for Yupoo galleries.
 // @match        https://*.yupoo.com/*
 // @grant        GM_getValue
@@ -115,6 +115,14 @@
     .yg-price { left: 8px; }
     .yg-date { right: 8px; }
     .yg-old { display: none !important; }
+    .yg-nomatch { display: none !important; }
+    #yg-bar input {
+      width: 130px;
+      font: inherit;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
     #yg-bar {
       position: fixed;
       right: 12px;
@@ -326,6 +334,7 @@
     if (!bar.isConnected) document.body.appendChild(bar);
     renderDates();
     renderOrder();
+    renderSearch();
     loadDates();
 
     grid.querySelectorAll('img').forEach((img) => {
@@ -550,6 +559,12 @@
 
   const sortBox = document.createElement('label');
   sortBox.append('Sort: ');
+  const searchBox = document.createElement('label');
+  searchBox.append('Search: ');
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.placeholder = 'title, code, price…';
+  searchBox.append(searchInput);
   const sortSelect = document.createElement('select');
   SORTS.forEach(([v, text]) => sortSelect.add(new Option(text, v)));
   sortSelect.value = CONFIG.sort;
@@ -559,8 +574,7 @@
     renderOrder();
   });
   sortBox.append(sortSelect);
-
-  bar.append(ageBox, sortBox);
+  bar.append(ageBox, sortBox, searchBox);
 
   /** Show date badges and hide albums older than the chosen age. Safe to call repeatedly. */
   function renderDates() {
@@ -626,6 +640,39 @@
         t.style.order = String(rank);
       });
   }
+
+  /** Lowercase, collapse whitespace. */
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  /**
+   * Title of a tile, from the album link's title attribute (fallback: visible text).
+   * Cached in data-yg-title because it never changes.
+   *
+   * @param {HTMLElement} tile
+   * @returns {string} Normalised title.
+   */
+  function titleOf(tile) {
+    if (tile.dataset.ygTitle === undefined) {
+      const link = tile.querySelector(ALBUM_LINK);
+      tile.dataset.ygTitle = norm((link && link.getAttribute('title')) || tile.textContent || '');
+    }
+    return tile.dataset.ygTitle;
+  }
+
+  /** Hide tiles whose title does not contain every word of the search box (AND). */
+  function renderSearch() {
+    const terms = norm(searchInput.value).split(' ').filter(Boolean);
+    document.querySelectorAll('.yg-tile').forEach((tile) => {
+      const hit = terms.every((term) => titleOf(tile).includes(term));
+      tile.classList.toggle('yg-nomatch', !hit);
+    });
+  }
+
+  let searchTimer;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderSearch, 150); // wait for the user to pause typing
+  });
 
   /** Fetch the real date of a few sample albums on this page, then re-render. */
   async function loadDates() {

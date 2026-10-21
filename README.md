@@ -43,6 +43,7 @@ On a gallery page you get:
   - **Toggle price badges**,
   - **Toggle album dates**: turns off date badges, the age filter and the date requests,
   - **Reset settings**.
+  - a **Search** box in the bottom-right corner that hides albums whose title does not contain every typed word (case-insensitive; the query is not saved)
 
 Choices are saved between visits. The unpacked-extension build has no menu, so there edit
 `DEFAULTS` at the top of the script instead (the **Age** selector works in both builds).
